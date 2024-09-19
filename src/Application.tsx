@@ -78,6 +78,7 @@ interface GameState {
     uses: number
   }[],
   updateItems: (newItems: GameState['items']) => void
+  updateItemLevel: (indexItem: number, levels: number, lastChance: number) => void
   settings: {
     effectiveMaxLevel: number
     minChance: number
@@ -96,6 +97,7 @@ const useGameStore = create<GameState>()((set) => ({
   reset: () => set(() => ({ battlesCount: 0 })),
   items: itemsDefault,
   updateItems: (newItems) => set(() => ({ items: newItems })),
+  updateItemLevel: (indexItem, levels, lastChance) => set((state) => ({ items: state.items.map((item, index) => index === indexItem ? { ...item, level: item.level + levels, lastChance } : item) })),
   settings: {
     effectiveMaxLevel: 100,
     minChance: 1,
@@ -128,26 +130,23 @@ function Application() {
 
   const handleLevelUp = (indexItem: number, levels: number, lastChance: number,) => {
     store.addHistory(`Уровень ${store.items[indexItem].name} ${store.items[indexItem].level}  повышен на ${levels} с шансом (${lastChance}) в битве ${store.battlesCount}`)
-    store.updateItems(store.items.map((item, index) => index === indexItem ? { ...item, level: item.level + levels, lastChance: lastChance } : item))
+    store.updateItemLevel(indexItem, levels, lastChance)
   }
 
   const chanceLevelUp = (indexItem: number, levels: number = 1) => {
-    console.log('chance level up', indexItem)
     const random = Math.floor(Math.random() * 101)
-    if (store.items[indexItem].level > 99) {
-      if (random >= 99) { handleLevelUp(indexItem, levels, random) }
-    } else {
-      if (random >= store.items[indexItem].level) { handleLevelUp(indexItem, levels, random) }
-    }
+    const currentLevel = store.items[indexItem].level
+    console.log('chance level up a > b', indexItem, random, currentLevel)
+    if (random >= 99 || random >= currentLevel) { handleLevelUp(indexItem, levels, random) }
   }
 
   const makeWin = (count = 1) => {
     for (let i = 0; i < count; i++) {
       store.increaseBattlesCount(1)
-      chanceLevelUp(0, 1)
       // handleLevelUp(1, 1, -1)
-      // chanceLevelUp(1, 1)
-      // chanceLevelUp(2, 1)
+      chanceLevelUp(0, 1)
+      chanceLevelUp(1, 1)
+      chanceLevelUp(2, 1)
       // chanceLevelUp(1, 1)
       // chanceLevelUp(0, 1)
     }
@@ -157,7 +156,7 @@ function Application() {
     if (value) {
       intervalBattle = setInterval(() => {
         makeWin(1)
-      }, 100)
+      }, 50)
     } else {
       clearInterval(intervalBattle)
     }
@@ -190,6 +189,7 @@ function Application() {
                       <Button onClick={() => makeWin(10)}>+10 побед</Button>
                       <Button onClick={() => makeWin(100)}>+100 побед</Button>
                       <Button onClick={() => makeWin(1000)}>+1000 побед</Button>
+                      <Button onClick={() => makeWin(5000)}>+5000 побед</Button>
                     </Space>
                     <Space>
                       <Switch checkedChildren="Старт" unCheckedChildren="Стоп" onChange={handleStart} />
@@ -225,12 +225,12 @@ function Application() {
                 {store.items.map((item, index) =>
                   <Card key={item.name} title={item.type === 'skill' ? 'Умение' : 'Оружие'} extra={<Button onClick={() => handleLevelUp(index, 25, -1)}>+ 25 уровней</Button>}>
                     <Flex vertical>
-                      <Typography.Text>Ур. {item.level}. Шанс {100 - item.level}%. Предыдущий шанс: {item.lastChance}%</Typography.Text>
+                      <Typography.Text>Ур. {item.level}. Шанс {100 - (item.level < 100 ? item.level : 99)}%. Предыдущий шанс: {item.lastChance}%</Typography.Text>
                       <Typography.Text>Описание: {item.description}</Typography.Text>
                       <Typography.Text>Использований: {item.uses} </Typography.Text>
                       <Typography.Text>Улучшение: при использовании {item.strategy === 'useAny' && 'и атаке'} </Typography.Text>
-                      {modifiersDefaults.map(modifier =>
-                        <Card key={index + modifier.name} title={'Модификатор: ' + modifier.name}>
+                      {modifiersDefaults.map((modifier, modifierIndex) =>
+                        <Card key={index + modifier.name} extra={item.level + 1 <= (modifierIndex + 1) * 100 ? 'Нужен уровень ' + ((modifierIndex + 1) * 100) : 'Работает'}>
                           <Flex vertical>
                             <Typography.Text>Ур. {modifier.level}. Шанс {modifier.level}%</Typography.Text>
                             <Typography.Text>Описание: {modifier.description}</Typography.Text>
