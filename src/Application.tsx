@@ -1,4 +1,4 @@
-import { App, Button, Card, Flex, InputNumber, Layout, Space, Switch, Typography } from 'antd'
+import { App, Button, Card, Flex, InputNumber, Layout, List, Space, Switch, Typography } from 'antd'
 import { create } from 'zustand'
 
 interface GameState {
@@ -23,6 +23,8 @@ interface GameState {
     time: number
   },
   updateSettings: (newSettings: GameState['settings']) => void
+  history: string[],
+  addHistory: (text: string) => void
 }
 
 const itemsDefault: GameState['items'] = [
@@ -98,7 +100,9 @@ const useGameStore = create<GameState>()((set) => ({
     modifierStepLevel: 100,
     time: 60,
   },
-  updateSettings: (newSettings) => set(() => ({ settings: newSettings }))
+  updateSettings: (newSettings) => set(() => ({ settings: newSettings })),
+  history: [],
+  addHistory: (text) => set((state) => ({ history: [text, ...state.history] })),
 }))
 
 let intervalBattle = 0
@@ -122,6 +126,7 @@ function Application() {
 
   const handleLevelUp = (indexItem: number, levels: number, lastChance: number,) => {
     console.log('level up', indexItem, levels, store.items)
+    store.addHistory(`Уровень ${store.items[indexItem].name} ${store.items[indexItem].level}  повышен на ${levels} с шансом (${lastChance})`)
     store.updateItems(store.items.map((item, index) => index === indexItem ? { ...item, level: item.level + levels, lastChance: lastChance } : item))
   }
 
@@ -166,7 +171,7 @@ function Application() {
         <Layout.Content>
           <Flex gap='large' vertical>
 
-
+            {/* Панели */}
             <Flex gap='small' align='space-between'>
               <Card title="Панель">
                 <Flex vertical gap='small'>
@@ -205,6 +210,17 @@ function Application() {
                 </Flex>
               </Card>
             </Flex>
+
+            {/* ИСТОРИЯ */}
+            <Card title="История">
+              <List
+                style={{ maxHeight: 300, overflow: 'auto' }}
+                bordered
+                dataSource={store.history}
+                renderItem={(item) => <List.Item>{item}</List.Item>} />
+            </Card>
+
+            {/* УМЕНИЯ */}
             <Flex gap='small'>
               {store.items.map((item, index) =>
                 <Card key={item.name} title={item.type === 'skill' ? 'Умение' : 'Оружие'} extra={<Button onClick={() => handleLevelUp(index, 25, -1)}>+ 25 уровней</Button>}>
