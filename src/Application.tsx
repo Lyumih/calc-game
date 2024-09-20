@@ -2,32 +2,64 @@ import { App, Button, Card, Flex, InputNumber, Layout, List, Space, Switch, Typo
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 
+type ItemStats = {
+  heal?: number
+  attack?: number
+  targetCount?: number
+  power?: number
+  repeatChance?: number
+}
+
+type Item = {
+  type: 'skill' | 'weapon' | 'modifier'
+  name: string
+  description: () =>  string,
+  score: () => number
+  stats: ItemStats
+  level: number
+  lastChance: number
+  strategy: 'use' | 'win' | 'useAny'
+  uses: number,
+}
 
 const itemsDefault: GameState['items'] = [
   {
     type: 'skill',
     name: 'Исцеление',
-    description: 'Исцеляет на 10 (10 + 1% за ур.) + Исцеление здоровья',
+    description: function (){return `Исцеляет на ${this.stats.heal} (${this.stats.heal} + 1% за ур.) + Исцеление здоровья`},
+    stats: {
+      heal: 5,
+    },
     lastChance: 0,
     level: 0,
+    score: function () { return (this.stats.heal || 0) + Math.floor((this.stats.heal || 0) * this.level / 100) || 0 },
     strategy: 'use',
     uses: 0,
   },
   {
     type: 'skill',
     name: 'Сильный удар',
-    description: 'Бьёт на 10 (10 + 1% за ур.) + Атака здоровья',
+    description: function () {return `Бьёт на 10 (10 + 1% за ур.) + Атака здоровья`},
+    stats: {
+      attack: 10
+    },
     lastChance: 0,
     level: 0,
+    score: function () { return this.stats.attack ? (this.stats.attack + Math.floor(this.stats.attack * this.level / 100)) : 0},
     strategy: 'use',
     uses: 0,
   },
   {
     type: 'weapon',
     name: 'Посох',
-    description: 'Атака + 10 (+1% за 100 ур), Исцеление +5 (+1% за 100 ур)',
+    description: function () {return `Атака + 20 (+1% за 100 ур), Исцеление +10 (+1% за 100 ур)`},
+    stats: {
+      attack: 20,
+      heal: 10,
+    },
     lastChance: 0,
     level: 0,
+    score: function () { return ((this.stats.attack || 0) + Math.floor((this.stats.attack || 0) * this.level / 100) + ((this.stats.attack || 0) + Math.floor((this.stats.attack || 0) * this.level / 100)))},
     strategy: 'useAny',
     uses: 0,
   },
@@ -37,16 +69,24 @@ const modifiersDefaults: GameState['items'] = [
   {
     type: 'modifier',
     name: 'Цели',
-    description: 'Дополнительная Цель + 1 ( +1 за 100 ур)',
+    description:  function () {return `Дополнительная Цель + 1 ( +1 за 100 ур)`},
+    stats: {
+      targetCount: 1,
+    },
     lastChance: 0,
     level: 0,
+    score: () => 100,
     strategy: 'win',
     uses: 0,
   },
   {
     type: 'modifier',
     name: 'Мощность',
-    description: 'Увеличивает мощность умения на 10 (10 + 1 за ур.)%',
+    description:  function () {return `Увеличивает мощность умения на 10 (10 + 1 за ур.)%`},
+    stats: {
+      power: 10,
+    },
+    score: () => 10,
     lastChance: 0,
     level: 0,
     strategy: 'win',
@@ -55,7 +95,11 @@ const modifiersDefaults: GameState['items'] = [
   {
     type: 'weapon',
     name: 'Повтор',
-    description: 'С шансом 10 (10 + 1 за ур)% повторно используется',
+    description:  function () {return `С шансом 10 (10 + 1 за ур)% повторно используется`},
+    stats: {
+      repeatChance: 10,
+    },
+    score: () => 10,
     lastChance: 0,
     level: 0,
     strategy: 'win',
@@ -68,15 +112,7 @@ interface GameState {
   spendTime: number,
   increaseBattlesCount: (by: number) => void,
   reset: () => void,
-  items: {
-    type: 'skill' | 'weapon' | 'modifier'
-    name: string
-    description: string,
-    level: number
-    lastChance: number
-    strategy: 'use' | 'win' | 'useAny'
-    uses: number
-  }[],
+  items: Item[],
   updateItems: (newItems: GameState['items']) => void
   updateItemLevel: (indexItem: number, levels: number, lastChance: number) => void
   settings: {
@@ -140,6 +176,10 @@ function Application() {
     if (random >= 99 || random >= currentLevel) { handleLevelUp(indexItem, levels, random) }
   }
 
+  const handleUpdateModifiers = () => {
+    
+  }
+
   const makeWin = (count = 1) => {
     for (let i = 0; i < count; i++) {
       store.increaseBattlesCount(1)
@@ -147,6 +187,7 @@ function Application() {
       chanceLevelUp(0, 1)
       chanceLevelUp(1, 1)
       chanceLevelUp(2, 1)
+      handleUpdateModifiers()
       // chanceLevelUp(1, 1)
       // chanceLevelUp(0, 1)
     }
@@ -226,14 +267,15 @@ function Application() {
                   <Card key={item.name} title={item.type === 'skill' ? 'Умение' : 'Оружие'} extra={<Button onClick={() => handleLevelUp(index, 25, -1)}>+ 25 уровней</Button>}>
                     <Flex vertical>
                       <Typography.Text>Ур. {item.level}. Шанс {100 - (item.level < 100 ? item.level : 99)}%. Предыдущий шанс: {item.lastChance}%</Typography.Text>
-                      <Typography.Text>Описание: {item.description}</Typography.Text>
+                      <Typography.Text>Описание: {item.description()}</Typography.Text>
+                      <Typography.Text>БМ: {item.score()}</Typography.Text>
                       <Typography.Text>Использований: {item.uses} </Typography.Text>
                       <Typography.Text>Улучшение: при использовании {item.strategy === 'useAny' && 'и атаке'} </Typography.Text>
                       {modifiersDefaults.map((modifier, modifierIndex) =>
                         <Card key={index + modifier.name} extra={item.level + 1 <= (modifierIndex + 1) * 100 ? 'Нужен уровень ' + ((modifierIndex + 1) * 100) : 'Работает'}>
                           <Flex vertical>
                             <Typography.Text>Ур. {modifier.level}. Шанс {modifier.level}%</Typography.Text>
-                            <Typography.Text>Описание: {modifier.description}</Typography.Text>
+                            <Typography.Text>Описание: {modifier.description()}</Typography.Text>
                             <Typography.Text>Использований: {modifier.uses} </Typography.Text>
                             <Typography.Text>Улучшение: при победе</Typography.Text>
                           </Flex>
